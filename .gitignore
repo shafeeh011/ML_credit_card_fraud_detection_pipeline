@@ -6,6 +6,12 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+.gitignore
+src/kaggle_data/
+src/extraced_data
+.kaggle/
+.gitignore
+.venv/
 .Python
 env/
 build/
