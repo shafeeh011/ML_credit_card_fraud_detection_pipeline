@@ -30,6 +30,7 @@ var/
 *.egg
 .kaggle/
 kaggle_data/
+extraced_data/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
