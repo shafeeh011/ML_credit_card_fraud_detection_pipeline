@@ -103,6 +103,7 @@ class DataInspector:
 
 # Example usage
 if __name__ == "__main__":
+    
     # Example usage of the DataInspector with different strategies.
 
     # Load the data

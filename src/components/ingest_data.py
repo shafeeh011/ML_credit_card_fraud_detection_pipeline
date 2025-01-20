@@ -22,25 +22,29 @@ class DataIngestor(ABC):
 # Implement a concrete class for ZIP Ingestion
 class ZipDataIngestor(DataIngestor):
     def ingest(self, file_path: str) -> pd.DataFrame:
-        """Extracts a .zip file and returns the content as a pandas DataFrame."""
-        if not file_path.endswith(".zip"):
-            raise ValueError("The provided file is not a .zip file.")
+        try:
+            """Extracts a .zip file and returns the content as a pandas DataFrame."""
+            if not file_path.endswith(".zip"):
+                raise ValueError("The provided file is not a .zip file.")
 
-        with zipfile.ZipFile(file_path, "r") as zip_ref:
-            zip_ref.extractall("extracted_data")
+            with zipfile.ZipFile(file_path, "r") as zip_ref:
+                zip_ref.extractall("extracted_data")
 
-        extracted_files = os.listdir("extracted_data")
-        csv_files = [f for f in extracted_files if f.endswith(".csv")]
+            extracted_files = os.listdir("extracted_data")
+            csv_files = [f for f in extracted_files if f.endswith(".csv")]
 
-        if len(csv_files) == 0:
-            raise FileNotFoundError("No CSV file found in the extracted data.")
-        if len(csv_files) > 1:
-            raise ValueError("Multiple CSV files found. Please specify which one to use.")
+            if len(csv_files) == 0:
+                raise FileNotFoundError("No CSV file found in the extracted data.")
+            if len(csv_files) > 1:
+                raise ValueError("Multiple CSV files found. Please specify which one to use.")
 
-        csv_file_path = os.path.join("extracted_data", csv_files[0])
-        df = pd.read_csv(csv_file_path)
+            csv_file_path = os.path.join("extracted_data", csv_files[0])
+            df = pd.read_csv(csv_file_path)
 
-        return df
+            return df
+
+        except Exception as e:
+            raise CustomException(e, sys)
 
 
 # Implement a concrete class for Kaggle Dataset Ingestion
@@ -56,7 +60,7 @@ class KaggleDataIngestor(DataIngestor):
             kaggle.api.authenticate()
 
             # Download the dataset
-            dataset_dir = ("src/kaggle_data")
+            dataset_dir = ("kaggle_data")
             kaggle.api.dataset_download_files(dataset_identifier, path=dataset_dir, unzip=True)
 
             # Find the CSV files
@@ -78,7 +82,7 @@ class KaggleDataIngestor(DataIngestor):
             return df
         
         except Exception as e:
-            raise exception.DataIngestionException(e, sys)
+            raise CustomException(e, sys)
 
 
 # Implement a Factory to create DataIngestors
@@ -107,7 +111,9 @@ if __name__ == "__main__":
     # print(df.head())
 
     #Example for a Kaggle dataset
-    dataset_identifier = "preetigupta004/cancer-issue"  # Replace with actual Kaggle dataset identifier
-    data_ingestor = DataIngestorFactory.get_data_ingestor("kaggle")
-    df = data_ingestor.ingest(dataset_identifier)
-    print(df.head())
+    #dataset_identifier = "mlg-ulb/creditcardfraud"  # Replace with actual Kaggle dataset identifier
+    #data_ingestor = DataIngestorFactory.get_data_ingestor("kaggle")
+    #df = data_ingestor.ingest(dataset_identifier)
+    #print(df.head())
+
+    #pass
