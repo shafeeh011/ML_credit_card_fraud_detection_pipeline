@@ -1,138 +1,133 @@
-import os
-import sys
-from dataclasses import dataclass
-
-from catboost import CatBoostRegressor
-from sklearn.ensemble import (
-    AdaBoostRegressor,
-    GradientBoostingRegressor,
-    RandomForestRegressor,
-)
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-from sklearn.tree import DecisionTreeRegressor
-from xgboost import XGBRegressor
-from sklearn.model_selection import GridSearchCV
-
-from src.exception import CustomException
 from src.logger import logging
-from src.utils import save_object
+from src.exception import CustomException
+from src.utils import save_object, load_object
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report
 
-@dataclass
-class ModelTrainerConfig:
-    trained_model_path = os.path.join("artifacts", "model.pkl")
 
-class ModelTrainer:
-    def __init__(self):
-        self.model_trainer_config = ModelTrainerConfig()
+class LogisticRegressionModel:
+    """
+    Class to handle training, predicting, evaluating, and saving a Logistic Regression model.
+    """
 
-    def evaluate_models(self, X_train, y_train, X_test, y_test, models, param):
+    def __init__(self, C=1.0, max_iter=100, penalty='l2', solver='lbfgs', random_state=None):
         """
-        Evaluate multiple models using GridSearchCV and calculate the R2 score.
+        Initialize the Logistic Regression model with specified hyperparameters.
+        """
+        logging.info("Initializing Logistic Regression model...")
+        self.model = LogisticRegression(C=C, max_iter=max_iter, penalty=penalty, solver=solver, random_state=random_state)
+
+    def train(self, X_train, Y_train):
+        """
+        Train the Logistic Regression model on the provided training data.
 
         Parameters:
-        X_train (np.ndarray): Training feature data.
-        y_train (np.ndarray): Training target data.
-        X_test (np.ndarray): Testing feature data.
-        y_test (np.ndarray): Testing target data.
-        models (dict): A dictionary of model names and instances.
-        param (dict): A dictionary of model names and hyperparameters.
+        X_train (array-like): Feature matrix for training.
+        Y_train (array-like): Target labels for training.
 
         Returns:
-        dict: A dictionary with model names as keys and their R2 scores as values.
+        None
         """
-        model_report = {}
+        logging.info("Training the Logistic Regression model...")
+        self.model.fit(X_train, Y_train)
+        logging.info("Model training complete.")
 
-        for model_name, model in models.items():
-            try:
-                logging.info(f"Training model: {model_name}")
-                params = param.get(model_name, {})
-                gs = GridSearchCV(estimator=model, param_grid=params, scoring='r2', cv=5)
-                gs.fit(X_train, y_train)
+    def predict(self, X_test):
+        """
+        Make predictions using the trained model.
 
-                best_model = gs.best_estimator_
-                logging.info(f"Best parameters for {model_name}: {gs.best_params_}")
+        Parameters:
+        X_test (array-like): Feature matrix for testing.
 
-                y_test_pred = best_model.predict(X_test)
-                test_model_r2_score = r2_score(y_test, y_test_pred)
+        Returns:
+        array-like: Predicted labels for the test data.
+        """
+        logging.info("Making predictions...")
+        predictions = self.model.predict(X_test)
+        logging.info("Predictions complete.")
+        return predictions
 
-                model_report[model_name] = test_model_r2_score
-                logging.info(f"{model_name} R2 score: {test_model_r2_score}")
-            except Exception as e:
-                logging.warning(f"Error evaluating model {model_name}: {e}")
-                model_report[model_name] = -float("inf")
+    def evaluate(self, X_test, Y_test):
+        """
+        Evaluate the model's performance on the test set.
 
-        return model_report
+        Parameters:
+        X_test (array-like): Feature matrix for testing.
+        Y_test (array-like): True labels for testing.
 
-    def initiate_model_trainer(self, train_array, test_array):
-        try:
-            logging.info("Splitting training and test input data.")
-            X_train, y_train, X_test, y_test = (
-                train_array[:, :-1],
-                train_array[:, -1],
-                test_array[:, :-1],
-                test_array[:, -1],
-            )
+        Returns:
+        dict: Evaluation metrics, including accuracy and classification report.
+        """
+        logging.info("Evaluating the model...")
+        y_pred = self.predict(X_test)
+        accuracy = accuracy_score(Y_test, y_pred)
+        logging.info(f"Model Accuracy: {accuracy:.4f}")
+        report = classification_report(Y_test, y_pred)
+        logging.info("Evaluation complete.")
+        return {
+            'accuracy': accuracy,
+            'classification_report': report
+        }
 
-            models = {
-                "Linear Regression": LinearRegression(),
-                "Decision Tree": DecisionTreeRegressor(),
-                "Random Forest": RandomForestRegressor(),
-                "Gradient Boosting": GradientBoostingRegressor(),
-                "CatBoosting Regressor": CatBoostRegressor(verbose=False),
-                "AdaBoost Regressor": AdaBoostRegressor(),
-                "XGBRegressor": XGBRegressor(),
-            }
+    def save_model(self, file_path):
+        """
+        Save the trained model using the save_object utility.
 
-            params = {
-                "Decision Tree": {
-                    'criterion': ['squared_error', 'friedman_mse', 'absolute_error', 'poisson'],
-                },
-                "Random Forest": {
-                    'n_estimators': [8, 16, 32, 64, 128, 256],
-                },
-                "Gradient Boosting": {
-                    'learning_rate': [0.1, 0.01, 0.05, 0.001],
-                    'subsample': [0.6, 0.7, 0.75, 0.8, 0.85, 0.9],
-                    'n_estimators': [8, 16, 32, 64, 128, 256],
-                },
-                "Linear Regression": {},
-                "XGBRegressor": {
-                    'learning_rate': [0.1, 0.01, 0.05, 0.001],
-                    'n_estimators': [8, 16, 32, 64, 128, 256],
-                },
-                "CatBoosting Regressor": {
-                    'depth': [6, 8, 10],
-                    'learning_rate': [0.01, 0.05, 0.1],
-                    'iterations': [30, 50, 100],
-                },
-                "AdaBoost Regressor": {
-                    'learning_rate': [0.1, 0.01, 0.5, 0.001],
-                    'n_estimators': [8, 16, 32, 64, 128, 256],
-                },
-            }
+        Parameters:
+        file_path (str): Path to save the model file.
 
-            model_report = self.evaluate_models(X_train, y_train, X_test, y_test, models, params)
+        Returns:
+        None
+        """
+        logging.info(f"Saving the model to {file_path}...")
+        save_object(file_path, self.model)
+        logging.info("Model saved successfully.")
 
-            best_model_score = max(sorted(model_report.values()))
-            best_model_name = list(model_report.keys())[list(model_report.values()).index(best_model_score)]
-            best_model = models[best_model_name]
+    @staticmethod
+    def load_model(file_path):
+        """
+        Load a saved model using the load_object utility.
 
-            if best_model_score < 0.6:
-                raise CustomException("No best model found.")
+        Parameters:
+        file_path (str): Path to the model file.
 
-            logging.info(f"Best model found: {best_model_name} with R2 score: {best_model_score}.")
+        Returns:
+        LogisticRegression: Loaded Logistic Regression model.
+        """
+        logging.info(f"Loading the model from {file_path}...")
+        model = load_object(file_path)
+        logging.info("Model loaded successfully.")
+        return model
 
-            save_object(
-                file_path=self.model_trainer_config.trained_model_path,
-                obj=best_model,
-            )
 
-            predicted = best_model.predict(X_test)
-            r2_square = r2_score(y_test, predicted)
+# Example usage
+if __name__ == "__main__":
+    try:
+        # Load the dataset
+        X_train = pd.read_csv("/home/muhammed-shafeeh/AI_ML/ML_credit_card_fraud_detection_pipeline/data/data_splits/X_train.csv")
+        y_train = pd.read_csv("/home/muhammed-shafeeh/AI_ML/ML_credit_card_fraud_detection_pipeline/data/data_splits/y_train.csv")
+        X_test = pd.read_csv("/home/muhammed-shafeeh/AI_ML/ML_credit_card_fraud_detection_pipeline/data/data_splits/X_test.csv")
+        y_test = pd.read_csv('/home/muhammed-shafeeh/AI_ML/ML_credit_card_fraud_detection_pipeline/data/data_splits/y_test.csv')
 
-            print(f"Best Model Found: {best_model_name}, R2 Score: {r2_square}")
-            return r2_square
+        # Initialize and train the model
+        model = LogisticRegressionModel(C=10, max_iter=10000, penalty='l1', solver='liblinear')
+        model.train(X_train, y_train)
 
-        except Exception as e:
-            raise CustomException(e, sys)
+        # Save the trained model
+        model_file_path = "/home/muhammed-shafeeh/AI_ML/ML_credit_card_fraud_detection_pipeline/models/logistic_regression_model.pkl"
+        model.save_model(model_file_path)
+
+        # Evaluate the model
+        results = model.evaluate(X_test, y_test)
+        print("Accuracy:", results['accuracy'])
+        print("Classification Report:\n", results['classification_report'])
+
+        # Load the model for prediction
+        loaded_model = LogisticRegressionModel.load_model(model_file_path)
+        predictions = loaded_model.predict(X_test)
+        print("Predictions on test data:\n", predictions)
+
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
